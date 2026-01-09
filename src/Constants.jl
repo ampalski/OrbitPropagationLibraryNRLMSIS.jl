@@ -1,6 +1,7 @@
 const SW = load("$(dirname(@__DIR__))/data/SW.jld2")["SW"]
-const max_SW = 61036
-const SW_keys = keys(SW)
+const MIN_SW = 36111
+const MAX_SW = 61036
+const SW_KEYS = keys(SW)
 
 # Temperature
 const PT = [
