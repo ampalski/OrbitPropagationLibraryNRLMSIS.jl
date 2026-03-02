@@ -85,7 +85,6 @@ function getApInput(jd::JulianDate)
     C             (7) AVERAGE OF EIGHT 3 HR AP INDICIES FROM 36 TO 57 HRS PRIOR
     C                    TO CURRENT TIME
     =#
-    apVec = zeros(7)
 
     usejd = jd isa JDate ?
         sum(jdate_to_mjdate(jd).epoch) :
@@ -104,7 +103,6 @@ function getApInput(jd::JulianDate)
     frac = usejd - basemjd
     rfrac = floor(Int, frac * 8) + 1
 
-    apVec[1] = SW[basemjd].ap_avg
 
     rfrac += 24
     fullList = [
@@ -113,12 +111,16 @@ function getApInput(jd::JulianDate)
         SW[basemjd - 1].ap;
         SW[basemjd].ap;
     ]
-    apVec[2] = fullList[rfrac]
-    apVec[3] = fullList[rfrac - 1]
-    apVec[4] = fullList[rfrac - 2]
-    apVec[5] = fullList[rfrac - 3]
-    apVec[6] = mean(fullList[(rfrac - 11):(rfrac - 4)])
-    apVec[7] = mean(fullList[(rfrac - 19):(rfrac - 12)])
+
+    apVec = @SVector [
+        SW[basemjd].ap_avg,
+        fullList[rfrac],
+        fullList[rfrac - 1],
+        fullList[rfrac - 2],
+        fullList[rfrac - 3],
+        mean(fullList[(rfrac - 11):(rfrac - 4)]),
+        mean(fullList[(rfrac - 19):(rfrac - 12)]),
+    ]
 
     return apVec
 end

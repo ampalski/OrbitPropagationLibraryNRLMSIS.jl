@@ -3,6 +3,10 @@ const MIN_SW = 36111
 const MAX_SW = 61036
 const SW_KEYS = keys(SW)
 
+const RGAS = 831.4
+const DGTR = 1.74533e-2
+const DR = 1.72142e-2
+
 # Temperature
 const PT = [
     9.86573e-1, 1.62228e-2, 1.5527e-2, -1.04323e-1, -3.75801e-3,
