@@ -106,12 +106,13 @@ function getMsisInput(
     )
     jd = convert_jd(jd, :UT1)
     datevec = jdate2datevec(jd)
-    jd0, _ = datevec2jdate([datevec[1], 1, 1, 0, 0, 0], system = :UT1)
-    jd_sum = sum(jd.epoch)
-    jd0_sum = sum(jd0.epoch)
+    mjd = jdate_to_mjdate(jd)
+    _, mjd0 = datevec2jdate([datevec[1], 1, 1, 0, 0, 0], system = :UT1)
+    mjd_sum = sum(mjd.epoch)
+    mjd0_sum = sum(mjd0.epoch)
 
-    iyd = floor(Int, jd_sum - jd0_sum + 1)
-    sec = (jd_sum - floor(jd_sum)) * 86400.0
+    iyd = floor(Int, mjd_sum - mjd0_sum + 1)
+    sec = (mjd_sum - floor(mjd_sum)) * 86400.0
 
     # Local time as in the MSISE documentation
     stl = sec / 3600 + long / 15
@@ -353,9 +354,10 @@ function gtd7!(output::OplMsis_Output, input::OplMsis_Input)
     # Only calculate thermosphere if altitude above zn2[1] in mesosphere
     if input.alt > ZN2[1]
         ds, ts = gts7!(input, gts3c, meso7, dmix, lpoly, parmb)
-        DM28M = DM28
+
+        DM28M = dmix.DM28
         if input.switches.IMR == 1
-            DM28M = DM28 * 1.0e6
+            DM28M = dmix.DM28 * 1.0e6
         end
         mssl = mss
         output.T[1] = ts[1]
@@ -481,6 +483,7 @@ end
 #=
 =#
 
+# export gts7!
 """
     gts7!()
 
@@ -536,7 +539,7 @@ function gts7!(
         1.0 + input.switches.SW[17] *
             _globe7!(input, view(PD, :, 4), lpoly)
     ) * PD[1, 4]
-    S = g0 / (Tinf - TLB)
+    gts3c.S = g0 / (Tinf - TLB)
 
     # Lower thermosphere temp variations not significant for density above
     # 300 km
@@ -579,7 +582,12 @@ function gts7!(
     G28 = input.switches.SW[21] * _globe7!(input, view(PD, :, 3), lpoly)
 
     # Variation of turbopause height
-    zhf = PDL[25, 2]
+    zhf = PDL[25, 2] *
+        (
+        1.0 + input.switches.SW[5] * PDL[25, 1] * sin(DGTR * input.lat) *
+            cos(DR * (input.iyd - PT[14]))
+    )
+
     T[1] = Tinf
     xmm = PDM[5, 3]
     z = input.alt
@@ -605,31 +613,31 @@ function gts7!(
     # N2 Density
     if !(z > ALTL[6] && input.mass != 28 && input.mass != 48)
         # Diffusive dnesity at Zlb
-        DB28 = PDM[1, 3] * exp(G28) * PD[1, 3]
+        gts3c.DB28 = PDM[1, 3] * exp(G28) * PD[1, 3]
         # Diffusive density at Alt
         T[2], D[3] = _densu!(
-            z, DB28, Tinf, TLB, 28.0, ALPHA[3], T[2], PTM[6], S,
+            z, gts3c.DB28, Tinf, TLB, 28.0, ALPHA[3], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
-        DD = D[3]
+        gts3c.DD = D[3]
         # Turbopause
         ZH28 = PDM[3, 3] * zhf
         ZHM28 = PDM[4, 3] * PDL[6, 2]
         XMD = 28.0 - xmm
         # Mixed density at Zlb
         tz, B28 = _densu!(
-            ZH28, DB28, Tinf, TLB, XMD, ALPHA[3] - 1, 0.0, PTM[6], S,
+            ZH28, gts3c.DB28, Tinf, TLB, XMD, ALPHA[3] - 1, 0.0, PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
 
         if !(z > ALTL[3] || input.switches.SW[15] == 0)
             # Mixed density at altitude
-            tz, DM28 = _densu!(
-                z, B28, Tinf, TLB, xmm, ALPHA[3], tz, PTM[6], S,
+            tz, dmix.DM28 = _densu!(
+                z, B28, Tinf, TLB, xmm, ALPHA[3], tz, PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             # Net density at altitude
-            D[3] = _dnet(D[3], DM28, ZHM28, xmm, 28.0)
+            D[3] = _dnet(D[3], dmix.DM28, ZHM28, xmm, 28.0)
         end
     end
 
@@ -641,48 +649,50 @@ function gts7!(
             _globe7!(input, view(PD, :, 1), lpoly)
 
         # Diffusive density at Zlb
-        DB04 = PDM[1, 1] * exp(G4) * PD[1, 1]
+        gts3c.DB04 = PDM[1, 1] * exp(G4) * PD[1, 1]
 
         # Diffusive density at altitude
         T[2], D[1] = _densu!(
-            z, DB04, Tinf, TLB, 4.0, ALPHA[1], T[2], PTM[6], S,
+            z, gts3c.DB04, Tinf, TLB, 4.0, ALPHA[1], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
-        DD = D[1]
+        gts3c.DD = D[1]
 
-        if z > ALTL[1] || input.switches.SW[15] == 0
-            if input.switches.IMR
-                for i in 1:9
-                    D[i] *= 1.0e6
-                end
-                D[6] /= 1000
-            end
-            return (D, T)
+        if !(z > ALTL[1] || input.switches.SW[15] == 0)
+            # Turbopause
+            ZH04 = PDM[3, 1]
+            # Mixed density at Zlb
+            T[2], B04 = _densu!(
+                ZH04, gts3c.DB04, Tinf, TLB, 4.0 - xmm, ALPHA[1] - 1.0, T[2],
+                PTM[6], gts3c.S,
+                MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
+            )
+            # Mixed density at Alt
+            T[2], DM04 = _densu!(
+                z, B04, Tinf, TLB, xmm, 0.0, T[2], PTM[6], gts3c.S,
+                MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
+            )
+            ZHM04 = ZHM28
+
+            # Net density at Alt
+            D[1] = _dnet(D[1], DM04, ZHM04, xmm, 4.0)
+
+            # Correction to specified mixing ratio at ground
+            gts3c.RL = log(B28 * PDM[2, 1] / B04)
+            ZC04 = PDM[5, 1] * PDL[1, 2]
+            HC04 = PDM[6, 1] * PDL[2, 2]
+
+            # Net density corrected at alt
+            D[1] = D[1] * _ccor(z, gts3c.RL, HC04, ZC04)
+            # @info "here!"
+            # if input.switches.IMR
+            #     for i in 1:9
+            #         D[i] *= 1.0e6
+            #     end
+            #     D[6] /= 1000
+            # end
+            # return (D, T)
         end
-        # Turbopause
-        ZH04 = PDM[3, 1]
-        # Mixed density at Zlb
-        T[2], B04 = _densu!(
-            ZH04, DB04, Tinf, TLB, 4.0 - xmm, ALPHA[1] - 1.0, T[2], PTM[6], S,
-            MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
-        )
-        # Mixed density at Alt
-        T[2], DM04 = _densu!(
-            z, B04, Tinf, TLB, xmm, 0.0, T[2], PTM[6], S,
-            MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
-        )
-        ZHM04 = ZHM28
-
-        # Net density at Alt
-        D[1] = _dnet(D[1], DM04, ZHM04, xmm, 4.0)
-
-        # Correction to specified mixing ratio at ground
-        RL = log(B28 * PDM[2, 1] / B04)
-        ZC04 = PDM[5, 1] * PDL[1, 2]
-        HC04 = PDM[6, 1] * PDL[2, 2]
-
-        # Net density corrected at alt
-        D[1] = D[1] * _ccor(z, RL, HC04, ZC04)
 
         if input.mass != 48
             if input.switches.IMR
@@ -704,13 +714,13 @@ function gts7!(
             _globe7!(input, view(PD, :, 2), lpoly)
 
         # Diffusive density at Zlb
-        DB16 = PDM[1, 2] * exp(G16) * PD[1, 2]
+        gts3c.DB16 = PDM[1, 2] * exp(G16) * PD[1, 2]
         # Diffusive density at Alt
         T[2], D[2] = _densu!(
-            z, DB16, Tinf, TLB, 16.0, ALPHA[2], T[2], PTM[6], S,
+            z, gts3c.DB16, Tinf, TLB, 16.0, ALPHA[2], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
-        DD = D[2]
+        gts3c.DD = D[2]
 
         if !(z > ALTL[2] || input.switches.SW[15] == 0)
             # Turbopause
@@ -718,24 +728,25 @@ function gts7!(
 
             # Mixed density at Zlb
             T[2], B16 = _densu!(
-                ZH16, DB16, Tinf, TLB, 16 - xmm, ALPHA[2] - 1.0, T[2], PTM[6], S,
+                ZH16, gts3c.DB16, Tinf, TLB, 16 - xmm, ALPHA[2] - 1.0, T[2],
+                PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             # Mixed density at Alt
             T[2], DM16 = _densu!(
-                z, B16, Tinf, TLB, xmm, 0.0, T[2], PTM[6], S,
+                z, B16, Tinf, TLB, xmm, 0.0, T[2], PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             ZHM16 = ZHM28
             # Net density at Alt
             D[2] = _dnet(D[2], DM16, ZHM16, xmm, 16.0)
 
-            RL = PDM[2, 2] * PDL[17, 2] *
+            gts3c.RL = PDM[2, 2] * PDL[17, 2] *
                 (1.0 + input.switches.SW[1] * PDL[24, 1] * (input.f107a - 150.0))
             HC16 = PDM[6, 2] * PDL[4, 2]
             ZC16 = PDM[5, 2] * PDL[3, 2]
             HC216 = PDM[6, 2] * PDL[5, 2]
-            D[2] = D[2] * _ccor2(z, RL, HC16, ZC16, HC216)
+            D[2] = D[2] * _ccor2(z, gts3c.RL, HC16, ZC16, HC216)
 
             # Chemistry correction
             HCC16 = PDM[8, 2] * PDL[14, 2]
@@ -764,17 +775,17 @@ function gts7!(
             _globe7!(input, view(PD, :, 5), lpoly)
 
         # Diffusive density at Zlb
-        DB32 = PDM[1, 4] * exp(G32) * PD[1, 5]
+        gts3c.DB32 = PDM[1, 4] * exp(G32) * PD[1, 5]
 
         # Diffusive density at Alt
         T[2], D[4] = _densu!(
-            z, DB32, Tinf, TLB, 32.0, ALPHA[4], T[2], PTM[6], S,
+            z, gts3c.DB32, Tinf, TLB, 32.0, ALPHA[4], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
         if input.mass == 49
-            DD += 2.0 * D[4]
+            gts3c.DD += 2.0 * D[4]
         else
-            DD = D[4]
+            gts3c.DD = D[4]
         end
 
         if input.switches.SW[15] == 0
@@ -795,13 +806,14 @@ function gts7!(
 
             # Mixed density at Zlb
             T[2], B32 = _densu!(
-                ZH32, DB32, Tinf, TLB, 32.0 - xmm, ALPHA[4] - 1.0, T[2], PTM[6], S,
+                ZH32, gts3c.DB32, Tinf, TLB, 32.0 - xmm, ALPHA[4] - 1.0, T[2],
+                PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
 
             # Mixed density at Alt
             T[2], DM32 = _densu!(
-                z, B32, Tinf, TLB, xmm, 0.0, T[2], PTM[6], S,
+                z, B32, Tinf, TLB, xmm, 0.0, T[2], PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             ZHM32 = ZHM28
@@ -809,18 +821,19 @@ function gts7!(
             # Net density at Alt
             D[4] = _dnet(D[4], DM32, ZHM32, xmm, 32.0)
 
+
             # Correction to specified mixing ratio at ground
-            RL = log(B28 * PDM[2, 4] / B32)
+            gts3c.RL = log(B28 * PDM[2, 4] / B32)
             HC32 = PDM[6, 4] * PDL[8, 2]
             ZC32 = PDM[5, 4] * PDL[7, 2]
-            D[4] = D[4] * _ccor(z, RL, HC32, ZC32)
+            D[4] = D[4] * _ccor(z, gts3c.RL, HC32, ZC32)
         end
         # Correction for general departure from diffusive equilibrium above Zlb
         HCC32 = PDM[8, 4] * PDL[23, 2]
         HCC232 = PDM[8, 4] * PDL[23, 1]
         ZCC32 = PDM[7, 4] * PDL[22, 2]
         RC32 = PDM[4, 4] * PDL[24, 2] *
-            (1.0 + input.switches.SW[1] * PDL[24, 2] * (input.f107a - 150.0))
+            (1.0 + input.switches.SW[1] * PDL[24, 1] * (input.f107a - 150.0))
 
         # Net density corrected at Alt
         D[4] *= _ccor2(z, RC32, HCC32, ZCC32, HCC232)
@@ -844,14 +857,15 @@ function gts7!(
             _globe7!(input, view(PD, :, 6), lpoly)
 
         # Diffusive density at Zlb
-        DB40 = PDM[1, 5] * exp(G40) * PD[1, 6]
+        gts3c.DB40 = PDM[1, 5] * exp(G40) * PD[1, 6]
 
         # Diffusive density at Alt
         T[2], D[5] = _densu!(
-            z, DB40, Tinf, TLB, 40.0, ALPHA[5], T[2], PTM[6], S,
+            z, gts3c.DB40, Tinf, TLB, 40.0, ALPHA[5], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
-        DD = D[5]
+
+        gts3c.DD = D[5]
 
         if !(z > ALTL[5] || input.switches.SW[15] == 0)
             # Turbopause
@@ -859,13 +873,14 @@ function gts7!(
 
             # Mixed density at Zlb
             T[2], B40 = _densu!(
-                ZH40, DB40, Tinf, TLB, 40.0 - xmm, ALPHA[5] - 1.0, T[2], PTM[6], S,
+                ZH40, gts3c.DB40, Tinf, TLB, 40.0 - xmm, ALPHA[5] - 1.0, T[2],
+                PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
 
             # Mixed density at Alt
             T[2], DM40 = _densu!(
-                ZH40, B40, Tinf, TLB, xmm, 0.0, T[2], PTM[6], S,
+                z, B40, Tinf, TLB, xmm, 0.0, T[2], PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             ZHM40 = ZHM28
@@ -874,12 +889,12 @@ function gts7!(
             D[5] = _dnet(D[5], DM40, ZHM40, xmm, 40.0)
 
             # Correction to specified mixing ratio at ground
-            RL = log(B28 * PDM[2, 5] / B40)
+            gts3c.RL = log(B28 * PDM[2, 5] / B40)
             HC40 = PDM[6, 5] * PDL[10, 2]
             ZC40 = PDM[5, 5] * PDL[9, 2]
 
             # Net density corrected at alt
-            D[5] *= _ccor(z, RL, HC40, ZC40)
+            D[5] *= _ccor(z, gts3c.RL, HC40, ZC40)
 
         end
         if input.mass != 48
@@ -903,27 +918,28 @@ function gts7!(
             _globe7!(input, view(PD, :, 7), lpoly)
 
         # Diffusive density at Zlb
-        DB01 = PDM[1, 6] * exp(G1) * PD[1, 7]
+        gts3c.DB01 = PDM[1, 6] * exp(G1) * PD[1, 7]
 
         # Diffusive density at Alt
         T[2], D[7] = _densu!(
-            z, DB01, Tinf, TLB, 1.0, ALPHA[7], T[2], PTM[6], S,
+            z, gts3c.DB01, Tinf, TLB, 1.0, ALPHA[7], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
-        DD = D[7]
+        gts3c.DD = D[7]
 
         if !(z > ALTL[7] || input.switches.SW[15] == 0)
             # Turbopuase
             ZH01 = PDM[3, 6]
             # Mixed density at Zlb
             T[2], B01 = _densu!(
-                ZH01, DB01, Tinf, TLB, 1.0 - xmm, ALPHA[7] - 1.0, T[2], PTM[6], S,
+                ZH01, gts3c.DB01, Tinf, TLB, 1.0 - xmm, ALPHA[7] - 1.0,
+                T[2], PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
 
             # Mixed density at Alt
             T[2], DM01 = _densu!(
-                z, B01, Tinf, TLB, xmm, 0.0, T[2], PTM[6], S,
+                z, B01, Tinf, TLB, xmm, 0.0, T[2], PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             ZHM01 = ZHM28
@@ -932,10 +948,10 @@ function gts7!(
             D[7] = _dnet(D[7], DM01, ZHM01, xmm, 1.0)
 
             # Correction to specified mixing ratio at ground
-            RL = log(B28 * PDM[2, 6] * abs(PDL[18, 2]) / B01)
+            gts3c.RL = log(B28 * PDM[2, 6] * abs(PDL[18, 2]) / B01)
             HC01 = PDM[6, 6] * PDL[12, 2]
             ZC01 = PDM[5, 6] * PDL[11, 2]
-            D[7] = D[7] * _ccor(z, RL, HC01, ZC01)
+            D[7] = D[7] * _ccor(z, gts3c.RL, HC01, ZC01)
 
             # Chemistry correction
             HCC01 = PDM[8, 6] * PDL[20, 2]
@@ -965,14 +981,14 @@ function gts7!(
             _globe7!(input, view(PD, :, 8), lpoly)
 
         # Diffusive density at Zlb
-        DB14 = PDM[1, 7] * exp(G14) * PD[1, 8]
+        gts3c.DB14 = PDM[1, 7] * exp(G14) * PD[1, 8]
 
         # Diffusive density at Alt
         T[2], D[8] = _densu!(
-            z, DB14, Tinf, TLB, 14.0, ALPHA[8], T[2], PTM[6], S,
+            z, gts3c.DB14, Tinf, TLB, 14.0, ALPHA[8], T[2], PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
-        DD = D[8]
+        gts3c.DD = D[8]
 
         if !(z > ALTL[8] || input.switches.SW[15] == 0)
             # Turbopause
@@ -980,13 +996,14 @@ function gts7!(
 
             # Mixed density at Zlb
             T[2], B14 = _densu!(
-                ZH14, DB14, Tinf, TLB, 14.0 - xmm, ALPHA[8] - 1.0, T[2], PTM[6], S,
+                ZH14, gts3c.DB14, Tinf, TLB, 14.0 - xmm, ALPHA[8] - 1.0, T[2],
+                PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
 
             # Mixed density at Alt
             T[2], DM14 = _densu!(
-                z, B14, Tinf, TLB, xmm, 0.0, T[2], PTM[6], S,
+                z, B14, Tinf, TLB, xmm, 0.0, T[2], PTM[6], gts3c.S,
                 MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
             )
             ZHM14 = ZHM28
@@ -995,10 +1012,10 @@ function gts7!(
             D[8] = _dnet(D[8], DM14, ZHM14, xmm, 14.0)
 
             # Correction to specified mixing ratio at ground
-            RL = log(B28 * PDM[2, 7] * abs(PDL[3, 1]) / B14)
+            gts3c.RL = log(B28 * PDM[2, 7] * abs(PDL[3, 1]) / B14)
             HC14 = PDM[6, 7] * PDL[2, 1]
             ZC14 = PDM[5, 7] * PDL[1, 1]
-            D[8] = D[8] * _ccor(z, RL, HC14, ZC14)
+            D[8] = D[8] * _ccor(z, gts3c.RL, HC14, ZC14)
 
             # Chemistry correction
             HCC14 = PDM[8, 7] * PDL[5, 1]
@@ -1020,21 +1037,21 @@ function gts7!(
     end
 
     #  GO TO (20,50,20,25,90,35,40,45,25,48,46),  J
-    # AnomO Nitrogen
+    # AnomO
     AnomO_included = [1, 3, 4, 6, 7, 8, 9, 10, 11]
     if skip in AnomO_included
         G16H = input.switches.SW[21] *
             _globe7!(input, view(PD, :, 9), lpoly)
         DB16H = PDM[1, 8] * exp(G16H) * PD[1, 9]
         THO = PDM[10, 8] * PDL[7, 1]
-        T2, DD = _densu!(
-            z, DB16H, THO, THO, 16.0, ALPHA[9], T2, PTM[6], S,
+        T2, gts3c.DD = _densu!(
+            z, DB16H, THO, THO, 16.0, ALPHA[9], 0.0, PTM[6], gts3c.S,
             MN1, ZN1, meso7.TN1, meso7.TGN1, parmb.RE, parmb.GSURF
         )
         ZSHT = PDM[6, 8]
         ZMHO = PDM[5, 8]
         ZSHO = _scalh(ZMHO, 16.0, THO, parmb.GSURF, parmb.RE)
-        D[9] = DD * exp(-ZSHT / ZSHO * (exp(-(z - ZMHO) / ZSHT) - 1.0))
+        D[9] = gts3c.DD * exp(-ZSHT / ZSHO * (exp(-(z - ZMHO) / ZSHT) - 1.0))
         if input.mass != 48
             if input.switches.IMR
                 for i in 1:9
@@ -1047,16 +1064,21 @@ function gts7!(
     end
 
     # Total Mass Density
-    D[6] = 1.66e-24 * (4.0 * D[1] + 16.0 * D[2] + 28.0 * D[3] + 32.0 * D[4] + 40.0 * D[5] + D[7] + 14.0 * D[8])
-    DB48 = 1.66e-24 * (4.0 * DB04 + 16.0 * DB16 + 28.0 * DB28 + 32.0 * DB32 + 40.0 * DB40 + DB01 + 14.0 * DB14)
+    D[6] = 1.66e-24 * (
+        4.0 * D[1] + 16.0 * D[2] + 28.0 * D[3] + 32.0 * D[4] +
+            40.0 * D[5] + D[7] + 14.0 * D[8]
+    )
+    gts3c.DB48 = 1.66e-24 * (
+        4.0 * gts3c.DB04 + 16.0 * gts3c.DB16 +
+            28.0 * gts3c.DB28 + 32.0 * gts3c.DB32 + 40.0 * gts3c.DB40 +
+            gts3c.DB01 + 14.0 * gts3c.DB14
+    )
 
-    if input.mass != 48
-        if input.switches.IMR
-            for i in 1:9
-                D[i] *= 1.0e6
-            end
-            D[6] /= 1000
+    if input.switches.IMR
+        for i in 1:9
+            D[i] *= 1.0e6
         end
+        D[6] /= 1000
     end
     return D, T
 end

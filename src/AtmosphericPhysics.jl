@@ -171,7 +171,7 @@ function _densu!(
 
         # Set up spline nodes
         for k in 1:mn
-            xs[k] = zeta(zn1[k], 1) / zgdif
+            xs[k] = zeta(zn1[k], z1) / zgdif
             ys[k] = 1.0 / tn1[k]
         end
 
@@ -438,7 +438,7 @@ function _globe7!(input::OplMsis_Input, p, lpoly::LPOLY)
     lpoly.PLG[6, 4] = (9.0 * c * lpoly.PLG[5, 4] - 7.0 * lpoly.PLG[4, 4]) / 2.0
     lpoly.PLG[7, 4] = (11.0 * c * lpoly.PLG[6, 4] - 8.0 * lpoly.PLG[5, 4]) / 3.0
 
-    if !(input.switches.SW[7] == 0 && input.switches.SW[8] == 0 && input.switches[14] == 0)
+    if !(input.switches.SW[7] == 0 && input.switches.SW[8] == 0 && input.switches.SW[14] == 0)
         lpoly.STLOC = sin(HR * input.stl)
         lpoly.CTLOC = cos(HR * input.stl)
         lpoly.S2TLOC = sin(2 * HR * input.stl)
@@ -454,11 +454,11 @@ function _globe7!(input::OplMsis_Input, p, lpoly::LPOLY)
 
     # F10.7 Effect
     df = input.f107 - input.f107a
-    dfa = input.f107a - 150.0
-    t[1] = p[20] * df * (1.0 + p[60] * dfa) + p[21] * df * df + p[22] * dfa +
-        p[30] * dfa^2
-    f1 = 1.0 + (p[48] * dfa + p[20] * df + p[21] * df * df) * input.switches.SWC[1]
-    f2 = 1.0 + (p[50] * dfa + p[20] * df + p[21] * df * df) * input.switches.SWC[1]
+    lpoly.DFA = input.f107a - 150.0
+    t[1] = p[20] * df * (1.0 + p[60] * lpoly.DFA) + p[21] * df * df + p[22] * lpoly.DFA +
+        p[30] * lpoly.DFA^2
+    f1 = 1.0 + (p[48] * lpoly.DFA + p[20] * df + p[21] * df * df) * input.switches.SWC[1]
+    f2 = 1.0 + (p[50] * lpoly.DFA + p[20] * df + p[21] * df * df) * input.switches.SWC[1]
 
     # Time Independent
     t[2] = @inbounds (
@@ -466,7 +466,7 @@ function _globe7!(input::OplMsis_Input, p, lpoly::LPOLY)
             p[3] * lpoly.PLG[5, 1] +
             p[23] * lpoly.PLG[7, 1]
     ) +
-        (p[15] * lpoly.PLG[3, 1]) * dfa * input.switches.SWC[1] +
+        (p[15] * lpoly.PLG[3, 1]) * lpoly.DFA * input.switches.SWC[1] +
         p[27] * lpoly.PLG[2, 1]
 
     # Symmetrical annual

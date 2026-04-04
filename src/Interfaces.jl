@@ -12,13 +12,11 @@ OUTPUT VARIABLES:
    T(1) - EXOSPHERIC TEMPERATURE
    T(2) - TEMPERATURE AT ALT
 =#
-export OplMsis_Output
 mutable struct OplMsis_Output
     D::MVector{9, Float64}
     T::MVector{2, Float64}
 end
 
-export getMsisOutput
 function getMsisOutput()
     return OplMsis_Output(MVector{9, Float64}(undef), MVector{2, Float64}(undef))
 end
@@ -54,9 +52,14 @@ function getDensity(jd::JulianDate, lat::Float64, lon::Float64, alt::Float64)
     end
 
     switches = getMsisSwitches()
-    switches.SW[9] = -1
+    # switches.SW[9] = -1
 
     input = getMsisInput(jd, alt, lat, lon, switches = switches)
+    #
+    # input.f107 = 72.2
+    # input.f107a = 71.1
+    # input.ap = 4.2
+    #
     output = getMsisOutput()
 
     gtd7d!(output, input)

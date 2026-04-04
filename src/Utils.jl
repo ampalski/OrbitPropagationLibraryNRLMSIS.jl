@@ -36,7 +36,7 @@ ADAPTED FROM NUMERICAL RECIPES BY PRESS ET AL
 * Y2: OUTPUT ARRAY OF SECOND DERIVATIVES
 """
 function _spline!(y2, x, y, n::Int, yp1::Float64, ypn::Float64)
-    u = zeros(100)
+    u = zeros(n)
     if yp1 > 0.99e30
         y2[1] = 0.0
         u[1] = 0.0
@@ -55,6 +55,8 @@ function _spline!(y2, x, y, n::Int, yp1::Float64, ypn::Float64)
             ) / (x[i + 1] - x[i - 1]) - sig * u[i - 1]
         ) / p
     end
+    # @info "y2 $y2"
+    # @info "u $u"
 
     if ypn > 0.99e30
         qn = 0

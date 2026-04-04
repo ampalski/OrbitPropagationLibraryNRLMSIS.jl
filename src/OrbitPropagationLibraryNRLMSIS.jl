@@ -1,7 +1,7 @@
 module OrbitPropagationLibraryNRLMSIS
 
 using StaticArrays
-using JLD2, FileIO
+using FileIO, JLD2
 using OrbitPropagationLibrarySOFA
 
 include("Constants.jl")
