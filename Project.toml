@@ -1,6 +1,6 @@
 name = "OrbitPropagationLibraryNRLMSIS"
 uuid = "13047893-382f-4339-b745-3678b5447bed"
-version = "1.0.0-DEV"
+version = "0.1.0"
 authors = ["Andrew Palski"]
 
 [deps]
@@ -17,7 +17,8 @@ StaticArrays = "1.9.15"
 julia = "1.10.10"
 
 [extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Aqua", "Test"]

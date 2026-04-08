@@ -83,7 +83,7 @@ function _densm(
     end
 
     yd1 = -tgn3[1] / (t1 * t1) * zgdif
-    yd2 = -tgn3[2] / (t1 * t1) * zgdif * ((re + z2) / (re + z1))^2
+    yd2 = -tgn3[2] / (t2 * t2) * zgdif * ((re + z2) / (re + z1))^2
     _spline!(y2out2, xs, ys, mn, yd1, yd2)
     x = zg / zgdif
     y = _splint(xs, ys, y2out2, mn, x)
@@ -136,7 +136,6 @@ function _densu!(
     t1 = 1.0
     mn = mn1
 
-    densu = 1.0
 
     # Joining altitude of Bates and spline
     za = zn1[1]
@@ -234,11 +233,6 @@ VERSION OF GLOBE FOR LOWER ATMOSPHERE 10/26/99
 """
 function _glob7s(p, input::OplMsis_Input, lpoly::LPOLY)
     PSET = 2.0
-    DAYL = -1.0
-    P32 = -4000.0
-    P18 = -4000.0
-    P14 = -4000.0
-    P39 = -4000.0
 
     if p[100] == 0.0
         # this might throw an error, trying to change a static value
@@ -355,54 +349,8 @@ function _glob7s(p, input::OplMsis_Input, lpoly::LPOLY)
     return tt
 end
 
-"""
-    _globe7!(input, p, lpoly)
-      FUNCTION GLOBE7(YRD,SEC,LAT,LONG,TLOC,F107A,F107,AP,P)
-
-CALCULATE G(L) FUNCTION 
-Upper Thermosphere Parameters
-"""
-function _globe7!(input::OplMsis_Input, p, lpoly::LPOLY)
-    TLL = 1000.0
-    SW9 = 1.0
-    DAYL = -1.0
-    P14 = -1000.0
-    P18 = -1000.0
-    P32 = -1000.0
+function _setLpoly!(lpoly, input)
     HR = 0.2618
-    SR = 7.2722e-5
-    SV = ones(25)
-    NSW = 14
-    P39 = -1000.0
-    t = zeros(15)
-
-    # 3 hr Magnetic activity functions
-    # EQ A24d
-    G0(A) = (
-        A - 4.0 + (p[26] - 1.0) *
-            (A - 4.0 + (exp(-abs(p[25]) * (A - 4.0)) - 1.0) / abs(p[25]))
-    )
-
-    # EQ A24c
-    SUMEX(EX) = 1.0 + (1.0 - EX^19) / (1.0 - EX) * EX^(0.5)
-
-    # EQ A24a
-    SG0(EX) = (
-        G0(input.ap[2]) + (
-            G0(input.ap[3]) * EX + G0(input.ap[4]) * EX * EX +
-                G0(input.ap[5]) * EX^3 +
-                (G0(input.ap[6]) * EX^4 + G0(input.ap[7]) * EX^12)
-                * (1 - EX^8) / (1 - EX)
-        )
-    ) / SUMEX(EX)
-
-    if input.switches.SW[9] > 0
-        SW9 = 1
-    end
-    if input.switches.SW[9] < 0
-        SW9 = -1
-    end
-
     lpoly.DAY = input.iyd
     lpoly.XLONG = input.long
 
@@ -446,6 +394,49 @@ function _globe7!(input::OplMsis_Input, p, lpoly::LPOLY)
         lpoly.S3TLOC = sin(3 * HR * input.stl)
         lpoly.C3TLOC = cos(3 * HR * input.stl)
     end
+    return nothing
+end
+
+"""
+    _globe7!(input, p, lpoly)
+      FUNCTION GLOBE7(YRD,SEC,LAT,LONG,TLOC,F107A,F107,AP,P)
+
+CALCULATE G(L) FUNCTION 
+Upper Thermosphere Parameters
+"""
+function _globe7!(input::OplMsis_Input, p, lpoly::LPOLY)
+    HR = 0.2618
+    SR = 7.2722e-5
+    NSW = 14
+    t = zeros(15)
+
+    # 3 hr Magnetic activity functions
+    # EQ A24d
+    G0(A) = (
+        A - 4.0 + (p[26] - 1.0) *
+            (A - 4.0 + (exp(-abs(p[25]) * (A - 4.0)) - 1.0) / abs(p[25]))
+    )
+
+    # EQ A24c
+    SUMEX(EX) = 1.0 + (1.0 - EX^19) / (1.0 - EX) * EX^(0.5)
+
+    # EQ A24a
+    SG0(EX) = (
+        G0(input.ap[2]) + (
+            G0(input.ap[3]) * EX + G0(input.ap[4]) * EX * EX +
+                G0(input.ap[5]) * EX^3 +
+                (G0(input.ap[6]) * EX^4 + G0(input.ap[7]) * EX^12)
+                * (1 - EX^8) / (1 - EX)
+        )
+    ) / SUMEX(EX)
+
+    if input.switches.SW[9] > 0
+        SW9 = 1
+    end
+    if input.switches.SW[9] < 0
+        SW9 = -1
+    end
+
 
     CD14 = cos(DR * (lpoly.DAY - p[14]))
     CD18 = cos(2.0 * DR * (lpoly.DAY - p[18]))

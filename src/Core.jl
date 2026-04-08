@@ -343,8 +343,6 @@ function gtd7!(output::OplMsis_Output, input::OplMsis_Input)
     xmm = PDM[5, 3]
 
     # Thermosphere/mesosphere (above zn2[1])
-    altt = max(input.alt, ZN2[1])
-    mss = input.mass
 
     # Only calculate N2 in thermosphere if alt in mixed region
     if input.alt < ZMIX && input.mass > 0
@@ -355,11 +353,9 @@ function gtd7!(output::OplMsis_Output, input::OplMsis_Input)
     if input.alt > ZN2[1]
         ds, ts = gts7!(input, gts3c, meso7, dmix, lpoly, parmb)
 
-        DM28M = dmix.DM28
-        if input.switches.IMR == 1
-            DM28M = dmix.DM28 * 1.0e6
-        end
-        mssl = mss
+        # if input.switches.IMR == 1
+        #     DM28M = dmix.DM28 * 1.0e6
+        # end
         output.T[1] = ts[1]
         output.T[2] = ts[2]
         for i in 1:9
@@ -411,7 +407,7 @@ function gtd7!(output::OplMsis_Output, input::OplMsis_Input)
     if input.mass == 0
         tz, dd = _densm(
             input.alt, 1.0, 0.0, 0.0, MN3, ZN3, meso7.TN3,
-            meso7.TGN3, MN2, ZN2, meso7.TN2, meso7.TGN2
+            meso7.TGN3, MN2, ZN2, meso7.TN2, meso7.TGN2, parmb.RE, parmb.GSURF
         )
         output.T[2] = tz
         return
@@ -509,12 +505,11 @@ function gts7!(
     D = MVector{9}(zeros(9))
     T = MVector{2}(zeros(2))
 
-    yrd = input.iyd
     za = PDL[16, 2]
     ZN1[1] = za
 
     # Tinf variations not important below za or zn1[1]
-    Tinf = 0.0
+    _setLpoly!(lpoly, input)
     if input.alt > ZN1[1]
         Tinf = PTM[1] * PT[1] * (
             1.0 + input.switches.SW[16] *
