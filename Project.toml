@@ -10,9 +10,11 @@ OrbitPropagationLibrarySOFA = "38b9e004-e2fa-4648-aa91-337faf7b69aa"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
+Aqua = "0.8"
 FileIO = "1.17.1"
 JLD2 = "0.6.3"
 OrbitPropagationLibrarySOFA = "0.3.1"
+Test = "1.11"
 StaticArrays = "1.9.15"
 julia = "1.10.10"
 
