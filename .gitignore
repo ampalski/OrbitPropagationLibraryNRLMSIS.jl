@@ -1,4 +1,5 @@
 /Manifest*.toml
 /SW-All.csv
 /parse_SW.jl
+/test.jl
 /*.FOR

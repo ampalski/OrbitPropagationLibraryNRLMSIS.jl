@@ -1,6 +1,6 @@
 const SW = load("$(dirname(@__DIR__))/data/SW.jld2")["SW"]
 const MIN_SW = 36111
-const MAX_SW = 61036
+const MAX_SW = 61192
 const SW_KEYS = keys(SW)
 
 const RGAS = 831.4
